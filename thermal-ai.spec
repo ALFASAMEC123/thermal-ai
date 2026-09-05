@@ -3,11 +3,20 @@
 block_cipher = None
 
 import os
-base_path = os.path.dirname(os.path.abspath(__file__))
+import sys
+
+# Get base path - works both in spec context and when run directly
+if 'SPEC_DIR' in globals():
+    base_path = SPEC_DIR
+else:
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+# Add src to pathex
+pathex = [base_path, os.path.join(base_path, 'src')]
 
 a = Analysis(
     ['main.py'],
-    pathex=[base_path],
+    pathex=pathex,
     binaries=[],
     datas=[
         ('config', 'config'),
@@ -77,5 +86,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/icon.ico' if os.path.exists('assets/icon.ico') else None,
+    icon=os.path.join(base_path, 'assets', 'icon.ico') if os.path.exists(os.path.join(base_path, 'assets', 'icon.ico')) else None,
 )
