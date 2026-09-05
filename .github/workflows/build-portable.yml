@@ -1,0 +1,390 @@
+name: Build Portable Windows Bundle
+
+on:
+  workflow_dispatch:  # Manual trigger from GitHub UI
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags (v1.0, v1.0.1, etc.)
+
+permissions:
+  contents: read
+
+env:
+  # Model configuration
+  MODEL_NAME: "qwen2-vl-7b-instruct-q4_k_m.gguf"
+  MODEL_URL: "https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct-GGUF/resolve/main/qwen2-vl-7b-instruct-q4_k_m.gguf"
+  OLLAMA_VERSION: "0.3.14"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  build-portable:
+    name: Build Portable Bundle
+    runs-on: windows-latest
+    timeout-minutes: 90  # GitHub Actions max is 360, but 90 should be enough
+
+    steps:
+      # ============================================================
+      # 1. CHECKOUT & SETUP
+      # ============================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for version tags
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          # Chocolatey for additional tools
+          choco install -y 7zip.install --no-progress
+        shell: pwsh
+
+      # ============================================================
+      # 2. DOWNLOAD OLLAMA WINDOWS BINARY
+      # ============================================================
+      - name: Download Ollama Windows binary
+        id: ollama
+        run: |
+          $ollamaUrl = "https://github.com/ollama/ollama/releases/download/v${{ env.OLLAMA_VERSION }}/ollama-windows-amd64.zip"
+          $ollamaZip = "ollama-windows-amd64.zip"
+          
+          Write-Host "Downloading Ollama from $ollamaUrl"
+          Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaZip -UseBasicParsing
+          
+          Write-Host "Extracting Ollama..."
+          7z x $ollamaZip -oollama-bin -y
+          
+          # Verify
+          $exe = "ollama-bin\ollama.exe"
+          if (Test-Path $exe) {
+            Write-Host "Ollama binary found: $exe"
+            & $exe --version
+          } else {
+            Write-Error "Ollama binary not found after extraction"
+            exit 1
+          }
+        shell: pwsh
+
+      # ============================================================
+      # 3. DOWNLOAD MODEL (GGUF)
+      # ============================================================
+      - name: Download Qwen2-VL-7B GGUF model
+        id: model
+        run: |
+          $modelUrl = "${{ env.MODEL_URL }}"
+          $modelFile = "${{ env.MODEL_NAME }}"
+          
+          Write-Host "Downloading model (4.5 GB)..."
+          Write-Host "This may take 5-15 minutes depending on GitHub runner network"
+          
+          # Use aria2c if available for faster download, otherwise Invoke-WebRequest
+          if (Get-Command aria2c -ErrorAction SilentlyContinue) {
+            aria2c -x 16 -s 16 -k 1M -o $modelFile $modelUrl
+          } else {
+            # Fallback to PowerShell with progress
+            $progress = $null
+            Invoke-WebRequest -Uri $modelUrl -OutFile $modelFile -UseBasicParsing
+          }
+          
+          # Verify file size (~4.5 GB = ~4.8 billion bytes)
+          $size = (Get-Item $modelFile).Length
+          $sizeGB = [math]::Round($size / 1GB, 2)
+          Write-Host "Model downloaded: $sizeGB GB"
+          
+          if ($size -lt 4GB) {
+            Write-Error "Model file too small ($sizeGB GB), download may be incomplete"
+            exit 1
+          }
+          
+          # Move to ollama models directory structure
+          $modelsDir = "ollama-bin\models\manifests\registry.ollama.ai\library\qwen2-vl\7b-instruct-q4_k_m"
+          New-Item -ItemType Directory -Path $modelsDir -Force | Out-Null
+          Move-Item $modelFile -Destination "$modelsDir\model.gguf" -Force
+          
+          Write-Host "Model placed at: $modelsDir\model.gguf"
+        shell: pwsh
+        timeout-minutes: 20
+
+      # ============================================================
+      # 4. INSTALL PYTHON DEPENDENCIES & BUILD EXE
+      # ============================================================
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pyinstaller
+        shell: pwsh
+
+      - name: Build thermal-ai.exe with PyInstaller
+        run: |
+          pyinstaller --clean thermal-ai.spec
+        shell: pwsh
+        timeout-minutes: 15
+
+      # ============================================================
+      # 5. CREATE PORTABLE BUNDLE STRUCTURE
+      # ============================================================
+      - name: Create portable bundle
+        id: bundle
+        run: |
+          $version = "${{ github.ref_name }}"
+          if ($version -eq "") { $version = "dev-$(Get-Date -Format 'yyyyMMdd-HHmm')" }
+          
+          $bundleName = "thermal-ai-portable-${version}"
+          $bundleDir = $bundleName
+          
+          Write-Host "Creating bundle: $bundleDir"
+          
+          # Create directory structure
+          New-Item -ItemType Directory -Path "$bundleDir\ollama" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$bundleDir\config" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$bundleDir\data\raw" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$bundleDir\data\output" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$bundleDir\models" -Force | Out-Null
+          
+          # Copy thermal-ai.exe
+          Copy-Item "dist\thermal-ai.exe" "$bundleDir\thermal-ai.exe" -Force
+          
+          # Copy Ollama binary
+          Copy-Item "ollama-bin\ollama.exe" "$bundleDir\ollama\ollama.exe" -Force
+          
+          # Find the downloaded GGUF file
+          $ggufFiles = Get-ChildItem "ollama-bin" -Recurse -Filter "*.gguf" -File
+          if ($ggufFiles.Count -eq 0) {
+            Write-Error "No GGUF model found!"
+            exit 1
+          }
+          $ggufPath = $ggufFiles[0].FullName
+          Write-Host "Found GGUF: $ggufPath"
+          
+          # Create proper Ollama model structure with Modelfile
+          $modelDir = "$bundleDir\ollama\models\qwen2-vl-7b"
+          New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+          
+          # Copy GGUF to model directory
+          $modelGguf = "$modelDir\model.gguf"
+          Copy-Item $ggufPath $modelGguf -Force
+          
+          # Create Modelfile for qwen2-vl:7b
+          @"
+          FROM ./model.gguf
+          TEMPLATE "{{- if .System }}<|im_start|>system
+          {{ .System }}<|im_end|>
+          {{- end }}{{- if .Prompt }}<|im_start|>user
+          {{ .Prompt }}<|im_end|>
+          {{- end }}<|im_start|>assistant
+          "
+          PARAMETER stop "<|im_end|>"
+          PARAMETER stop "<|im_start|>"
+          "#
+          | Out-File -Encoding ASCII "$modelDir\Modelfile"
+          
+          Write-Host "Created Modelfile at: $modelDir\Modelfile"
+          
+          # Copy config
+          Copy-Item "config\settings.yaml" "$bundleDir\config\settings.yaml" -Force
+          
+          # Create start.bat
+          @"
+          @echo off
+          setlocal enabledelayedexpansion
+          
+          :: Get script directory
+          set "BUNDLE_DIR=%~dp0"
+          cd /d "%BUNDLE_DIR%"
+          
+          :: Set Ollama environment
+          set "OLLAMA_MODELS=%BUNDLE_DIR%\ollama\models"
+          set "OLLAMA_HOST=127.0.0.1:11434"
+          
+          :: Start Ollama server in background
+          echo Starting Ollama server...
+          start /B "" "%BUNDLE_DIR%\ollama\ollama.exe" serve
+          
+          :: Wait for Ollama to be ready
+          echo Waiting for Ollama to start...
+          :wait
+          timeout /t 2 /nobreak >nul
+          curl -s http://%OLLAMA_HOST%/api/tags >nul 2>&1
+          if errorlevel 1 goto wait
+          
+          :: Register model if not already registered
+          echo Registering vision model...
+          "%BUNDLE_DIR%\ollama\ollama.exe" create qwen2-vl:7b -f "%BUNDLE_DIR%\ollama\models\qwen2-vl-7b\Modelfile" >nul 2>&1
+          
+          :: Verify model is available
+          curl -s http://%OLLAMA_HOST%/api/tags | findstr /i "qwen2-vl" >nul
+          if errorlevel 1 (
+              echo WARNING: Model registration may have failed
+          ) else (
+              echo Model qwen2-vl:7b ready!
+          )
+          
+          echo.
+          echo ========================================
+          echo  Thermal AI - Portable Bundle
+          echo ========================================
+          echo.
+          
+          :: Run thermal-ai with passed arguments
+          if "%~1"=="" (
+              echo Usage: start.bat <input> [-o output] [options]
+              echo Example: start.bat data\raw\image.irb -o data\output
+              echo.
+              "%BUNDLE_DIR%\thermal-ai.exe" --help
+          ) else (
+              "%BUNDLE_DIR%\thermal-ai.exe" %*
+          )
+          
+          :: Keep window open on error
+          if errorlevel 1 pause
+          "@
+          | Out-File -Encoding ASCII "$bundleDir\start.bat"
+          
+          # Create stop.bat
+          @"
+          @echo off
+          echo Stopping Ollama server...
+          taskkill /F /IM ollama.exe >nul 2>&1
+          echo Done.
+          "@
+          | Out-File -Encoding ASCII "$bundleDir\stop.bat"
+          
+          # Create README.txt
+          @"
+          Thermal AI - Portable Windows Bundle
+          ======================================
+          
+          Version: ${version}
+          Built: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+          
+          QUICK START:
+          1. Extract this ZIP to any folder
+          2. Put your .irb/.raw thermal images in data\raw\
+          3. Double-click start.bat
+          
+          EXAMPLES:
+            start.bat data\raw\image.irb -o data\output
+            start.bat data\raw\ -o data\output --recursive
+            start.bat --check-ollama
+          
+          REQUIREMENTS:
+            - Windows 10/11 64-bit
+            - GPU with 6+ GB VRAM (for 2-4 sec/image)
+              Falls back to CPU (60-120 sec/image) if no GPU
+            - 8+ GB RAM recommended
+            - NO INTERNET REQUIRED
+          
+          MODEL INCLUDED:
+            - Qwen2-VL-7B-Instruct (4-bit GGUF, ~4.5 GB)
+            - Optimized for thermal image analysis
+          
+          STRUCTURE:
+            thermal-ai.exe        Main application
+            ollama\ollama.exe     Local Ollama server
+            ollama\models\        GGUF model file
+            config\settings.yaml  Configuration
+            data\raw\             Input folder
+            data\output\          Output folder
+            start.bat             Start server + run analysis
+            stop.bat              Stop server
+          
+          TROUBLESHOOTING:
+            - If GPU not detected: ensure NVIDIA drivers installed
+            - If "port in use": run stop.bat then start.bat again
+            - First image slower (model loads to VRAM)
+          
+          SUPPORT: Check README.md in source repository
+          "@
+          | Out-File -Encoding UTF8 "$bundleDir\README.txt"
+          
+          # Verify bundle
+          Write-Host "Bundle contents:"
+          Get-ChildItem $bundleDir -Recurse | Select-Object Name, Length, FullName | Format-Table -AutoSize | Out-Host
+          
+          # Calculate total size
+          $totalSize = (Get-ChildItem $bundleDir -Recurse -File | Measure-Object -Property Length -Sum).Sum
+          $totalGB = [math]::Round($totalSize / 1GB, 2)
+          Write-Host "Total bundle size: $totalGB GB"
+          
+          echo "BUNDLE_DIR=$bundleDir" >> $env:GITHUB_OUTPUT
+          echo "BUNDLE_NAME=$bundleName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      # ============================================================
+      # 6. CREATE ZIP ARCHIVE
+      # ============================================================
+      - name: Create ZIP archive
+        run: |
+          $bundleDir = "${{ steps.bundle.outputs.BUNDLE_DIR }}"
+          $bundleName = "${{ steps.bundle.outputs.BUNDLE_NAME }}"
+          $zipName = "$bundleName.zip"
+          
+          Write-Host "Creating ZIP: $zipName"
+          7z a -tzip "$zipName" "$bundleDir\*" -mx=1
+          
+          $zipSize = (Get-Item $zipName).Length
+          $zipGB = [math]::Round($zipSize / 1GB, 2)
+          Write-Host "ZIP created: $zipName ($zipGB GB)"
+          
+          echo "ZIP_NAME=$zipName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      # ============================================================
+      # 7. UPLOAD ARTIFACT
+      # ============================================================
+      - name: Upload portable bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.bundle.outputs.BUNDLE_NAME }}
+          path: ${{ steps.bundle.outputs.BUNDLE_NAME }}.zip
+          retention-days: 90
+          compression-level: 0  # Already compressed
+
+      # ============================================================
+      # 8. RELEASE (on tag push)
+      # ============================================================
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.bundle.outputs.BUNDLE_NAME }}.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # ALTERNATIVE: TINY CPU-ONLY BUNDLE (Moondream2)
+  # ============================================================
+  build-tiny:
+    name: Build Tiny CPU Bundle (Moondream2)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    if: false  # Set to true if you want this too
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller moondream
+        shell: pwsh
+      
+      - name: Download Moondream2 model
+        run: |
+          # Moondream2 is ~1.5 GB
+          Invoke-WebRequest -Uri "https://huggingface.co/vikhyatk/moondream2/resolve/main/moondream-2b-int8.mf.gz" -OutFile "moondream.mf.gz"
+          # Would need custom integration - placeholder
+        shell: pwsh
+      
+      # ... similar bundle creation but with Moondream2 integration

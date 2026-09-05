@@ -1,0 +1,30 @@
+# Core dependencies
+numpy>=1.24.0
+pillow>=10.0.0
+opencv-python>=4.8.0
+pandas>=2.0.0
+pyyaml>=6.0
+requests>=2.31.0
+tqdm>=4.66.0
+tifffile>=2023.0
+
+# Machine Learning / Fine-tuning
+torch>=2.1.0
+transformers>=4.35.0
+accelerate>=0.24.0
+peft>=0.6.0
+trl>=0.7.0
+datasets>=2.14.0
+bitsandbytes>=0.41.0
+
+# Unsloth (optional, for fast training)
+# Install separately: pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+
+# Optional: FLIR SDK support
+# exiftool (system dependency) - install via: apt-get install libimage-exiftool-perl
+
+# Development
+pytest>=7.4.0
+black>=23.0.0
+ruff>=0.1.0
+mypy>=1.5.0

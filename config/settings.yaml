@@ -1,0 +1,56 @@
+# Konfigurácia termovízneho spracovacieho systému
+# ------------------------------------------------
+
+# Ollama / VLM nastavenia
+ollama:
+  host: "http://localhost:11434"
+  model: "qwen2-vl:7b"  # Alternatívy: "llava:7b", "llava:13b", "qwen2-vl:7b"
+  timeout: 120
+  temperature: 0.1
+  top_p: 0.9
+
+# Konverzia termovíznych súborov
+conversion:
+  input_formats: [".irb", ".raw", ".csv", ".txt"]
+  output_format: "PNG"
+  normalize_method: "minmax"  # minmax, zscore, histogram_eq
+  colormap: "inferno"  # inferno, jet, hot, viridis, plasma
+  target_size: [640, 480]  # [width, height] pre VLM
+
+# Export do PNG s textom
+export:
+  canvas_height: 200  # výška plátna pre text v pixeloch
+  font_size: 14
+  font_family: "DejaVuSansMono"
+  text_color: [255, 255, 255]  # RGB
+  background_color: [0, 0, 0]  # RGB
+  padding: 10
+  line_spacing: 1.5
+
+# Fine-tuning nastavenia
+finetuning:
+  base_model: "Qwen/Qwen2-VL-7B-Instruct"
+  output_dir: "./models/finetuned"
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+  learning_rate: 2e-4
+  num_epochs: 3
+  batch_size: 2
+  gradient_accumulation_steps: 4
+  max_seq_length: 2048
+  warmup_steps: 50
+  logging_steps: 10
+  save_steps: 100
+  eval_steps: 100
+  fp16: true
+  bf16: false
+  gradient_checkpointing: true
+
+# Spracovanie
+processing:
+  batch_size: 4
+  max_workers: 2
+  save_intermediate: true
+  overwrite_existing: false
