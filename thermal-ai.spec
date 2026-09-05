@@ -5,11 +5,12 @@ block_cipher = None
 import os
 import sys
 
-# Get base path - works both in spec context and when run directly
-if 'SPEC_DIR' in globals():
+# In PyInstaller spec context, use SPEC_DIR (provided by PyInstaller)
+# or fall back to current directory
+try:
     base_path = SPEC_DIR
-else:
-    base_path = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    base_path = os.getcwd()
 
 # Add src to pathex
 pathex = [base_path, os.path.join(base_path, 'src')]
