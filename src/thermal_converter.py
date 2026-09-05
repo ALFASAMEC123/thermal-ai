@@ -513,7 +513,7 @@ if __name__ == "__main__":
     parser.add_argument("output", help="Výstupný súbor (.png, .jpg)")
     parser.add_argument("--width", type=int, help="Šírka pre RAW formát")
     parser.add_argument("--height", type=int, help="Výška pre RAW formát")
-    parser.add_argument("--dtype", default="uint16", help("Dátový typ pre RAW")
+    parser.add_argument("--dtype", default="uint16", help="Dátový typ pre RAW")
     parser.add_argument("--normalize", default="minmax", choices=["minmax", "zscore", "histogram_eq", "percentile"])
     parser.add_argument("--colormap", default="inferno", choices=["inferno", "jet", "hot", "viridis", "plasma", "magma", "turbo", "gray"])
     parser.add_argument("--resize", nargs=2, type=int, metavar=("W", "H"), help="Cieľové rozlíšenie")

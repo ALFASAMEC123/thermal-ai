@@ -4,7 +4,7 @@
 # Ollama / VLM nastavenia
 ollama:
   host: "http://localhost:11434"
-  model: "qwen2-vl:7b"  # Alternatívy: "llava:7b", "llava:13b", "qwen2-vl:7b"
+  model: "llava:7b"  # Alternatívy: "llava:7b", "llava:13b", "llava:7b"
   timeout: 120
   temperature: 0.1
   top_p: 0.9
