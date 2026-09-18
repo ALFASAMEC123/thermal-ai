@@ -5,12 +5,8 @@ block_cipher = None
 import os
 import sys
 
-# SPEC_DIR is only defined when PyInstaller executes this spec file.
-# Use try/except to handle both direct execution and PyInstaller context.
-try:
-    base_path = SPEC_DIR
-except NameError:
-    base_path = os.path.dirname(os.path.abspath(__file__))
+# PyInstaller runs spec file from its directory, so cwd works
+base_path = os.getcwd()
 
 # Add src to pathex
 pathex = [base_path, os.path.join(base_path, 'src')]
