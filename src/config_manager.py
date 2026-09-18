@@ -90,12 +90,17 @@ class ConfigManager:
     def load(self, config_path: str = "config/settings.yaml") -> Settings:
         path = Path(config_path)
         
-        # For PyInstaller frozen executable, also check next to executable
+        # For PyInstaller frozen executable, check next to executable first
         if getattr(sys, 'frozen', False):
             exe_dir = Path(sys.executable).parent
             exe_config = exe_dir / "config" / "settings.yaml"
             if exe_config.exists():
                 path = exe_config
+            else:
+                # Also check _MEIPASS (PyInstaller temp dir) for bundled config
+                meipass_config = Path(sys._MEIPASS) / "config" / "settings.yaml"
+                if meipass_config.exists():
+                    path = meipass_config
         
         if path.exists():
             with open(path, 'r', encoding='utf-8') as f:
@@ -103,7 +108,14 @@ class ConfigManager:
             self._settings = self._parse_config(data)
         else:
             self._settings = Settings()
-            self.save(config_path)
+            # Save to executable directory if frozen, else to given path
+            if getattr(sys, 'frozen', False):
+                exe_dir = Path(sys.executable).parent
+                save_path = exe_dir / "config" / "settings.yaml"
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                self.save(str(save_path))
+            else:
+                self.save(config_path)
         return self._settings
 
     def _parse_config(self, data: Dict[str, Any]) -> Settings:

@@ -18,7 +18,7 @@ jobs:
   build-portable:
     name: Build Portable Bundle
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -60,33 +60,53 @@ jobs:
         run: |
           Write-Host "Starting Ollama server..."
           $ollamaExe = "ollama-bin\ollama.exe"
-          Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
-          Start-Sleep -Seconds 10
+          $ollamaProcess = Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden -PassThru
+          Start-Sleep -Seconds 15
           
           Write-Host "Pulling model: ${{ env.MODEL_NAME }}"
-          & $ollamaExe pull ${{ env.MODEL_NAME }}
+          $pullResult = & $ollamaExe pull ${{ env.MODEL_NAME }}
+          Write-Host "Pull result: $pullResult"
           
           Write-Host "Verifying model..."
           & $ollamaExe list
           
+          Write-Host "Stopping Ollama server..."
           taskkill /F /IM ollama.exe 2>$null
           Start-Sleep -Seconds 3
         shell: pwsh
-        timeout-minutes: 30
+        timeout-minutes: 45
 
       - name: Copy Ollama model data to bundle structure
         run: |
+          # Ollama stores models in %USERPROFILE%\.ollama\models on Windows
           $userModels = "$env:USERPROFILE\.ollama\models"
           $bundleModels = "ollama-bin\models"
           if (Test-Path $userModels) {
             Copy-Item $userModels $bundleModels -Recurse -Force
             Write-Host "Copied Ollama models to bundle"
+            Get-ChildItem $bundleModels -Recurse | Select-Object Name, Length | Format-Table -AutoSize | Out-Host
           } else {
-            Write-Warning "Ollama models not found at $userModels"
+            Write-Error "Ollama models not found at $userModels"
+            # Try alternative locations
+            $altPaths = @(
+              "$env:LOCALAPPDATA\ollama\models",
+              "$env:PROGRAMDATA\ollama\models"
+            )
+            foreach ($alt in $altPaths) {
+              if (Test-Path $alt) {
+                Copy-Item $alt $bundleModels -Recurse -Force
+                Write-Host "Found and copied from alternative location: $alt"
+                break
+              }
+            }
+            if (-not (Test-Path $bundleModels)) {
+              Write-Error "Could not find Ollama models in any known location"
+              exit 1
+            }
           }
         shell: pwsh
 
-      - name: Install Python dependencies
+      - name: Install Python runtime dependencies only
         run: |
           pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
@@ -97,7 +117,19 @@ jobs:
         run: |
           pyinstaller --clean thermal-ai.spec
         shell: pwsh
-        timeout-minutes: 15
+        timeout-minutes: 20
+
+      - name: Verify executable
+        run: |
+          $exe = "dist\thermal-ai.exe"
+          if (Test-Path $exe) {
+            Write-Host "Executable found: $exe"
+            & $exe --help
+          } else {
+            Write-Error "Executable not found at $exe"
+            exit 1
+          }
+        shell: pwsh
 
       - name: Create portable bundle
         id: bundle
@@ -121,10 +153,14 @@ jobs:
           if (Test-Path $srcModels) {
             Copy-Item $srcModels $dstModels -Recurse -Force
             Write-Host "Model data copied to bundle"
+          } else {
+            Write-Error "Model data not found at $srcModels"
+            exit 1
           }
           
           Copy-Item "config\settings.yaml" "$bundleDir\config\settings.yaml" -Force
           
+          # Create start.bat with proper model registration
           @"
           @echo off
           setlocal enabledelayedexpansion
@@ -141,7 +177,17 @@ jobs:
           if errorlevel 1 goto wait
           
           echo Registering vision model...
-          "%BUNDLE_DIR%\ollama\ollama.exe" create llava:7b -f "%BUNDLE_DIR%\ollama\models\manifests\registry.ollama.ai\library\llava\7b\Modelfile" >nul 2>&1
+          REM Find the model manifest file
+          set "MODEL_MANIFEST="
+          for /r "%BUNDLE_DIR%\ollama\models" %%f in (Modelfile) do (
+              if exist "%%f" set "MODEL_MANIFEST=%%f"
+          )
+          if defined MODEL_MANIFEST (
+              "%BUNDLE_DIR%\ollama\ollama.exe" create llava:7b -f "%MODEL_MANIFEST%" >nul 2>&1
+          ) else (
+              echo WARNING: Could not find model manifest, trying default registration
+              "%BUNDLE_DIR%\ollama\ollama.exe" create llava:7b -f "%BUNDLE_DIR%\ollama\models\manifests\registry.ollama.ai\library\llava\7b\Modelfile" >nul 2>&1
+          )
           
           curl -s http://%OLLAMA_HOST%/api/tags | findstr /i "llava" >nul
           if errorlevel 1 (
@@ -157,7 +203,7 @@ jobs:
           echo.
           
           if "%~1"=="" (
-              echo Usage: start.bat <input> [-o output] [options]
+              echo Usage: start.bat ^<input^> [-o output] [options]
               echo Example: start.bat data\raw\image.irb -o data\output
               echo.
               "%BUNDLE_DIR%\thermal-ai.exe" --help
@@ -184,7 +230,7 @@ jobs:
           Built: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
           QUICK START:
           1. Extract ZIP
-          2. Put .irb/.raw in data\raw\
+          2. Put .irb/.raw files in data\raw\
           3. Double-click start.bat
           EXAMPLES:
             start.bat data\raw\image.irb -o data\output

@@ -1,0 +1,13 @@
+# Training dependencies for fine-tuning (NOT included in portable bundle)
+# Install with: pip install -r requirements-training.txt
+
+torch>=2.1.0
+transformers>=4.35.0
+accelerate>=0.24.0
+peft>=0.6.0
+trl>=0.7.0
+datasets>=2.14.0
+bitsandbytes>=0.41.0
+
+# Unsloth (optional, for fast training)
+# Install separately: pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"

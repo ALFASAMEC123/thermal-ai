@@ -11,6 +11,7 @@ from enum import Enum
 from PIL import Image, ImageDraw, ImageFont, ImageColor
 import numpy as np
 import logging
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -80,16 +81,24 @@ class ThermalPNGExporter:
         return self._font_cache[key]
 
     def _find_font_file(self, name: str) -> Optional[str]:
-        """Hľadanie fontového súboru v systéme."""
+        """Hľadanie fontového súboru v systéme (Windows/Linux) + PyInstaller bundle."""
         import os
+        import sys
+        
         font_dirs = [
             "/usr/share/fonts",
             "/usr/local/share/fonts",
-            "/home/strane/.local/share/fonts",
-            "/home/strane/.fonts",
+            os.path.expanduser("~/.local/share/fonts"),
+            os.path.expanduser("~/.fonts"),
             "C:/Windows/Fonts",
         ]
-
+        
+        # Add PyInstaller bundle fonts if frozen
+        if getattr(sys, 'frozen', False):
+            bundle_fonts = Path(sys._MEIPASS) / "fonts"
+            if bundle_fonts.exists():
+                font_dirs.insert(0, str(bundle_fonts))
+        
         extensions = [".ttf", ".otf", ".TTF", ".OTF"]
 
         for font_dir in font_dirs:
@@ -352,10 +361,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Export termovízneho reportu do PNG")
     parser.add_argument("image", help="Termovízny obrázok")
-    parser.add_argument("output", help "Výstupný PNG")
+    parser.add_argument("output", help="Výstupný PNG")
     parser.add_argument("--text", help="Text analýzy (ak nie je poskytnutý, použije sa dummy)")
     parser.add_argument("--canvas-height", type=int, default=200, help="Výška plátna pre text")
-    parser.add_argument("--font-size", type=int, default=14, help "Veľkosť fontu")
+    parser.add_argument("--font-size", type=int, default=14, help="Veľkosť fontu")
 
     args = parser.parse_args()
 

@@ -7,7 +7,7 @@ import json
 import base64
 import io
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass, asdict
 from PIL import Image
 import numpy as np
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Dataset builder pre fine-tuning")
     parser.add_argument("--images", required=True, help="Adresár s obrázkami")
     parser.add_argument("--annotations", required=True, help="JSON s anotaciami")
-    parser.add_argument("--output", required=True, help "Výstupný adresár")
+    parser.add_argument("--output", required=True, help="Výstupný adresár")
     parser.add_argument("--format", default="unsloth", choices=["unsloth", "axolotl", "llamafactory", "sharegpt"])
 
     args = parser.parse_args()

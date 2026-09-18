@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Build outputs
+dist/
+build/
+*.spec
+*.exe
+
+# Portable bundle
+thermal-ai-portable-*/
+*.zip
+
+# Ollama
+ollama-bin/
+.ollama/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Model files
+models/
+*.gguf
+*.bin
+
+# Data
+data/raw/*
+data/output/*
+data/processed/*
+!data/raw/.gitkeep
+!data/output/.gitkeep
+!data/processed/.gitkeep
+
+# Training outputs
+models/finetuned/
+*.jsonl
+
+# Temporary
+*.tmp
+*.temp

@@ -7,21 +7,40 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from dataclasses import dataclass, field
 
-import torch
-from datasets import load_dataset, Dataset
-from transformers import TrainingArguments, TrainerCallback
-from trl import SFTTrainer
+try:
+    import torch
+except (ImportError, OSError, RuntimeError, ValueError):
+    torch = None
+
+try:
+    from datasets import load_dataset, Dataset
+except Exception:
+    load_dataset = None
+    Dataset = None
+
+try:
+    from transformers import TrainingArguments, TrainerCallback
+except Exception:
+    TrainingArguments = None
+    TrainerCallback = object
+
+try:
+    from trl import SFTTrainer
+except Exception:
+    SFTTrainer = None
 
 try:
     from unsloth import FastVisionModel
     from unsloth import is_bfloat16_supported
     UNSLOTH_AVAILABLE = True
-except ImportError:
+except Exception:
     UNSLOTH_AVAILABLE = False
     FastVisionModel = None
+    def is_bfloat16_supported():
+        return False
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +51,7 @@ class FinetuningConfig:
     # Model
     model_name: str = "Qwen/Qwen2-VL-7B-Instruct"
     max_seq_length: int = 2048
-    dtype: Optional[torch.dtype] = None  # Auto
+    dtype: Optional[Any] = None  # Auto
     load_in_4bit: bool = True
     load_in_8bit: bool = False
 
@@ -119,6 +138,9 @@ class ThermalTrainer:
 
     def prepare_dataset(self, data_path: Union[str, Path], split: str = "train") -> Dataset:
         """Príprava datasetu pre tréning."""
+        if load_dataset is None or Dataset is None:
+            raise RuntimeError("Fine-tuning dependencies are not installed. Install torch, datasets, transformers, and trl.")
+
         data_path = Path(data_path)
 
         if data_path.suffix == '.jsonl':
@@ -194,6 +216,9 @@ class ThermalTrainer:
               eval_dataset: Optional[Dataset] = None,
               resume_from_checkpoint: Optional[str] = None):
         """Spustenie tréningu."""
+        if TrainingArguments is None or SFTTrainer is None:
+            raise RuntimeError("Fine-tuning dependencies are not installed. Install torch, transformers, datasets, and trl.")
+
         if self.model is None:
             self.load_model()
 
@@ -350,7 +375,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-seq-len", type=int, default=2048, help="Max sequence length")
     parser.add_argument("--resume", help="Resume from checkpoint")
     parser.add_argument("--merge", action="store_true", help="Merge LoRA after training")
-    parser.add_argument("--push-hub", help "Push to HF Hub (repo_id)")
+    parser.add_argument("--push-hub", help="Push to HF Hub (repo_id)")
 
     args = parser.parse_args()
 

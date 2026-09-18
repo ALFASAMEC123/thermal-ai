@@ -31,7 +31,7 @@ class VLMModel(Enum):
 @dataclass
 class VLMConfig:
     host: str = "http://localhost:11434"
-    model: str = "qwen2-vl:7b"
+    model: str = "llava:7b"
     timeout: int = 120
     temperature: float = 0.1
     top_p: float = 0.9
@@ -351,7 +351,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Test VLM analýzy")
     parser.add_argument("image", help="Obrázok na analýzu")
-    parser.add_argument("--model", default="qwen2-vl:7b", help="Model v Ollama")
+    parser.add_argument("--model", default="llava:7b", help="Model v Ollama")
     parser.add_argument("--host", default="http://localhost:11434", help="Ollama host")
     parser.add_argument("--prompt", choices=["full", "short"], default="full", help="Typ promptu")
 

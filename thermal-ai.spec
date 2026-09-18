@@ -5,12 +5,8 @@ block_cipher = None
 import os
 import sys
 
-# In PyInstaller spec context, use SPEC_DIR (provided by PyInstaller)
-# or fall back to current directory
-try:
-    base_path = SPEC_DIR
-except NameError:
-    base_path = os.getcwd()
+# In PyInstaller spec context, SPEC_DIR is always available
+base_path = SPEC_DIR
 
 # Add src to pathex
 pathex = [base_path, os.path.join(base_path, 'src')]
@@ -32,6 +28,10 @@ a = Analysis(
         'src.finetuning.dataset_builder',
         'src.finetuning.train_unsloth',
         'PIL',
+        'PIL.Image',
+        'PIL.ImageDraw',
+        'PIL.ImageFont',
+        'PIL.ImageColor',
         'cv2',
         'numpy',
         'pandas',
@@ -42,6 +42,15 @@ a = Analysis(
         'pandas._libs.tslibs.base',
         'pandas._libs.tslibs.timedeltas',
         'pandas._libs.tslibs.np_datetime',
+        'dataclasses',
+        'enum',
+        'pathlib',
+        'concurrent.futures',
+        'textwrap',
+        'base64',
+        'io',
+        'struct',
+        'logging',
     ],
     hookspath=[],
     hooksconfig={},
@@ -58,6 +67,7 @@ a = Analysis(
         'datasets',
         'peft',
         'bitsandbytes',
+        'accelerate',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

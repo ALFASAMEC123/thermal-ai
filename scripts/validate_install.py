@@ -7,8 +7,12 @@ import sys
 import subprocess
 from pathlib import Path
 
-# Pridaj src do path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+import requests
+from PIL import ImageFont
 
 
 def test_imports():
@@ -109,8 +113,8 @@ def test_dependencies():
         try:
             __import__(import_name)
             print(f"  ✓ {name} (voliteľné)")
-        except ImportError:
-            print(f"  - {name} (voliteľné, nenainštalované)")
+        except Exception:
+            print(f"  - {name} (voliteľné, nenainštalované alebo poškodené)")
 
     return all_ok
 
