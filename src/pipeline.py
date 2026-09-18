@@ -195,30 +195,30 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Termovízny procesing pipeline",
+        description="Thermal vision processing pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Príklady:
-  # Spracovanie jedného súboru
+Examples:
+  # Process single file
   python -m src.pipeline input.irb -o output/
 
-  # Spracovanie celého adresára
+  # Process whole directory
   python -m src.pipeline data/raw/ -o data/output/ --recursive
 
-  # S vlastnou konfiguráciou
+  # With custom config
   python -m src.pipeline data/raw/ --config config/custom.yaml
         """
     )
 
-    parser.add_argument("input", help="Vstupný súbor alebo adresár")
-    parser.add_argument("-o", "--output", default="data/output", help="Výstupný adresár")
-    parser.add_argument("-c", "--config", help="Konfiguračný súbor")
-    parser.add_argument("-r", "--recursive", action="store_true", help="Rekurzívne pre adresáre")
-    parser.add_argument("--overwrite", action="store_true", help="Prepísať existujúce súbory")
-    parser.add_argument("--workers", type=int, help="Počet vlákien")
-    parser.add_argument("--model", help="VLM model (prekonfiguruje Ollama model)")
-    parser.add_argument("--list-formats", action="store_true", help="Zobrazí podporované formáty")
-    parser.add_argument("--check-ollama", action="store_true", help="Skontroluje pripojenie k Ollama")
+    parser.add_argument("input", help="Input file or directory")
+    parser.add_argument("-o", "--output", default="data/output", help="Output directory")
+    parser.add_argument("-c", "--config", help="Config file")
+    parser.add_argument("-r", "--recursive", action="store_true", help="Recursive for directories")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing files")
+    parser.add_argument("--workers", type=int, help="Number of workers")
+    parser.add_argument("--model", help="VLM model (overrides Ollama model)")
+    parser.add_argument("--list-formats", action="store_true", help="Show supported formats")
+    parser.add_argument("--check-ollama", action="store_true", help="Check Ollama connection")
 
     args = parser.parse_args()
 
@@ -227,38 +227,38 @@ Príklady:
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    # Zobrazenie formátov
+    # Show formats
     if args.list_formats:
-        print("Podporované formáty:")
+        print("Supported formats:")
         for fmt in ThermalFormat:
             print(f"  {fmt.value}")
         return
 
-    # Vytvorenie pipeline
+    # Create pipeline
     pipeline = create_pipeline(args.config)
 
-    # Override modelu
+    # Override model
     if args.model:
         pipeline.analyzer.config.model = args.model
 
     # Check Ollama
     if args.check_ollama:
         if pipeline.analyzer.client.check_connection():
-            print(f"✓ Pripojené k Ollama: {pipeline.analyzer.config.host}")
+            print(f"Connected to Ollama: {pipeline.analyzer.config.host}")
             models = pipeline.analyzer.client.list_models()
-            print(f"Dostupné modely: {', '.join(models)}")
+            print(f"Available models: {', '.join(models)}")
         else:
-            print("✗ Nepodarilo sa pripojiť k Ollama", file=sys.stderr)
+            print("Failed to connect to Ollama", file=sys.stderr)
             sys.exit(1)
         return
 
     input_path = Path(args.input)
 
     if not input_path.exists():
-        print(f"CHYBA: Cesta neexistuje: {input_path}", file=sys.stderr)
+        print(f"ERROR: Path does not exist: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Spracovanie
+    # Process
     if input_path.is_file():
         results = [pipeline.process_file(input_path, args.output, args.overwrite)]
     elif input_path.is_dir():
@@ -266,19 +266,19 @@ Príklady:
             input_path, args.output, args.recursive, args.overwrite
         )
     else:
-        print(f"CHYBA: Neplatná cesta: {input_path}", file=sys.stderr)
+        print(f"ERROR: Invalid path: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Štatistiky
+    # Statistics
     successful = sum(1 for r in results if r.success)
     failed = len(results) - successful
 
-    print(f"\n=== VÝSLEDOK ===")
-    print(f"Úspešné: {successful}")
-    print(f"Zlyhané: {failed}")
+    print(f"\n=== RESULT ===")
+    print(f"Successful: {successful}")
+    print(f"Failed: {failed}")
 
     if failed > 0:
-        print("\nChyby:")
+        print("\nErrors:")
         for r in results:
             if not r.success:
                 print(f"  {r.input_file}: {r.error}")
